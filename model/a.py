@@ -9,10 +9,14 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
+
+# -------------------
+# Data Preprocessing
+# -------------------
 
 # Load the data
 data = pd.read_csv("model/filtered_dataset.csv")
@@ -42,13 +46,17 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
+# --------------------------------------------
+# Hyperparameter Tuning for Individual Models
+# --------------------------------------------
+
 # Define the models and their hyperparameter grids
 models = {
     "Logistic Regression": {
         "model": LogisticRegression(random_state=42, max_iter=1000),
         "params": {
             "C": [0.1, 1, 10, 100],
-            "solver": ["lbfgs"],  # 'lbfgs' is compatible with L2 penalty
+            "solver": ["lbfgs"],
             "penalty": ["l2"]
         }
     },
@@ -68,7 +76,7 @@ models = {
         }
     },
     "Support Vector Machine": {
-        "model": SVC(random_state=42),
+        "model": SVC(random_state=42, probability=True),  # probability=True for soft voting possibility
         "params": {
             "C": [0.1, 1, 10],
             "kernel": ["linear", "rbf"],
@@ -92,7 +100,7 @@ models = {
     }
 }
 
-# Dictionary to store the results
+# Dictionary to store the tuned best estimators and their results
 best_estimators = {}
 results = {}
 
@@ -108,6 +116,7 @@ for model_name, config in models.items():
     )
     grid_search.fit(X_train, y_train)
     
+    # Save the best estimator and test accuracy
     best_estimators[model_name] = grid_search.best_estimator_
     y_pred = grid_search.best_estimator_.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
@@ -116,11 +125,28 @@ for model_name, config in models.items():
     print(f"{model_name} best parameters: {grid_search.best_params_}")
     print(f"{model_name} Accuracy = {acc:.4f}\n")
 
-# Visualize the model performance
+# -------------------------------------
+# Ensemble: Voting Classifier
+# -------------------------------------
+
+# Create a list of (name, estimator) tuples for the voting classifier.
+estimators = [(name, est) for name, est in best_estimators.items()]
+
+# Build the Voting Classifier using hard voting.
+voting_clf = VotingClassifier(estimators=estimators, voting='hard', n_jobs=-1)
+voting_clf.fit(X_train, y_train)
+
+# Evaluate the voting classifier
+y_pred_voting = voting_clf.predict(X_test)
+voting_accuracy = accuracy_score(y_test, y_pred_voting)
+results["Voting Classifier"] = voting_accuracy
+print(f"Voting Classifier Accuracy = {voting_accuracy:.4f}")
+
+# Optionally, display the results in a bar plot
 plt.figure(figsize=(10, 6))
 model_names = list(results.keys())
 accuracy_scores = list(results.values())
 sns.barplot(x=accuracy_scores, y=model_names)
 plt.xlabel("Accuracy Score")
-plt.title("Model Comparison with Hyperparameter Tuning")
+plt.title("Model Comparison with Hyperparameter Tuning and Voting Ensemble")
 plt.show()

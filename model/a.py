@@ -12,7 +12,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 # -------------------
 # Data Preprocessing
@@ -103,6 +103,7 @@ models = {
 # Dictionary to store the tuned best estimators and their results
 best_estimators = {}
 results = {}
+confusion_matrices = {}
 
 # Run GridSearchCV for each model
 for model_name, config in models.items():
@@ -117,16 +118,19 @@ for model_name, config in models.items():
     grid_search.fit(X_train, y_train)
     
     # Save the best estimator and test accuracy
-    best_estimators[model_name] = grid_search.best_estimator_
-    y_pred = grid_search.best_estimator_.predict(X_test)
+    best_estimator = grid_search.best_estimator_
+    best_estimators[model_name] = best_estimator
+    
+    y_pred = best_estimator.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
     results[model_name] = acc
+    confusion_matrices[model_name] = confusion_matrix(y_test, y_pred)
     
     print(f"{model_name} best parameters: {grid_search.best_params_}")
     print(f"{model_name} Accuracy = {acc:.4f}\n")
 
 # -------------------------------------
-# Ensemble: Voting Classifier
+# Ensemble: Voting Classifier (Hard Voting)
 # -------------------------------------
 
 # Create a list of (name, estimator) tuples for the voting classifier.
@@ -140,13 +144,42 @@ voting_clf.fit(X_train, y_train)
 y_pred_voting = voting_clf.predict(X_test)
 voting_accuracy = accuracy_score(y_test, y_pred_voting)
 results["Voting Classifier"] = voting_accuracy
+confusion_matrices["Voting Classifier"] = confusion_matrix(y_test, y_pred_voting)
 print(f"Voting Classifier Accuracy = {voting_accuracy:.4f}")
 
-# Optionally, display the results in a bar plot
+# -------------------------------
+# Visualization
+# -------------------------------
+
+# 1. Bar Plot for Model Accuracies
 plt.figure(figsize=(10, 6))
 model_names = list(results.keys())
 accuracy_scores = list(results.values())
 sns.barplot(x=accuracy_scores, y=model_names)
 plt.xlabel("Accuracy Score")
 plt.title("Model Comparison with Hyperparameter Tuning and Voting Ensemble")
+plt.show()
+
+# 2. Confusion Matrices for All Models
+# Total number of models (individual models + voting classifier)
+n_models = len(confusion_matrices)
+n_cols = 4  # Number of columns in our subplot grid
+n_rows = int(np.ceil(n_models / n_cols))
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 5 * n_rows))
+axes = axes.flatten()  # Flatten axes for easy iteration
+
+for ax, model_name in zip(axes, confusion_matrices.keys()):
+    cm = confusion_matrices[model_name]
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax)
+    ax.set_title(f"Confusion Matrix\n{model_name}")
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+
+# If there are any unused subplots, hide them
+for ax in axes[len(confusion_matrices):]:
+    ax.axis('off')
+
+plt.suptitle("Confusion Matrices for All Models", fontsize=18)
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 plt.show()
